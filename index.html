@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            height: 100%; /* Essential for flexbox to work on body */
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8faff; /* Lighter, solid background */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            padding: 20px; /* Add padding to body */
+            box-sizing: border-box; /* Include padding in element's total width and height */
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            border: 1px solid #f0f2f5; /* Very subtle border */
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); /* Softer shadow */
+            padding: 24px;
+            max-width: 1200px;
+            width: 100%;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        .log-input-section {
+            position: relative;
+            transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+            overflow: hidden;
+            max-height: 500px;
+            padding-bottom: 24px;
+        }
+
+        .log-input-section.minimized {
+            max-height: 60px;
+            padding-bottom: 10px;
+        }
+
+        .log-input-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 18px;
+            transition: margin-bottom 0.5s ease-out;
+        }
+
+        .log-input-section.minimized .log-input-header {
+            margin-bottom: 0;
+        }
+
+        .log-input-content {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            transition: max-height 0.5s ease-out, opacity 0.5s ease-out;
+            max-height: 400px;
+            opacity: 1;
+        }
+
+        .log-input-section.minimized .log-input-content {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 1px solid #e0e7ee; /* Softer border color */
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        button {
+            background-color: #4c6ef5; /* A cleaner blue */
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease; /* Include box-shadow in transition */
+            box-shadow: 0 2px 8px rgba(76, 110, 245, 0.2); /* Softer shadow for buttons */
+            border: none;
+            align-self: flex-start;
+        }
+        button:hover {
+            background-color: #364fc7; /* Darker blue on hover */
+            transform: translateY(-1px); /* Subtle lift */
+            box-shadow: 0 4px 12px rgba(76, 110, 245, 0.3); /* Slightly more pronounced shadow on hover */
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 4px rgba(76, 110, 245, 0.1); /* Even softer shadow on click */
+        }
+
+        .minimize-button {
+            background: none;
+            border: none;
+            color: #6c757d; /* Muted grey */
+            font-size: 1.5rem; /* Slightly smaller icon */
+            cursor: pointer;
+            padding: 0;
+            margin-right: 10px;
+            line-height: 1;
+            transition: transform 0.2s ease, color 0.3s ease;
+            box-shadow: none;
+            background-image: none;
+        }
+        .minimize-button:hover {
+            color: #495057; /* Darker grey on hover */
+            transform: scale(1.05); /* Subtle scale */
+            box-shadow: none;
+        }
+        .minimize-button:active {
+            transform: scale(1.0);
+            box-shadow: none;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .timeline-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .slider-and-markers-wrapper {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #timelineSlider {
+            width: 95%;
+            -webkit-appearance: none;
+            height: 6px; /* Even thinner slider track */
+            background: #e0e7ee; /* Lighter track background */
+            border-radius: 3px; /* Smaller border-radius */
+            outline: none;
+            opacity: 0.9; /* More opaque */
+            transition: opacity .2s;
+            position: relative;
+            z-index: 10;
+        }
+
+        #timelineSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px; /* Slightly smaller thumb */
+            height: 18px; /* Slightly smaller thumb */
+            border-radius: 50%;
+            background: #4c6ef5; /* Matches button color */
+            cursor: grab;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1); /* Softer thumb shadow */
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        #timelineSlider::-webkit-slider-thumb:active {
+            cursor: grabbing;
+            background: #364fc7;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        #timelineSlider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4c6ef5;
+            cursor: grab;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        #timelineSlider::-moz-range-thumb:active {
+            cursor: grabbing;
+            background: #364fc7;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        #timelineTimestampDisplay {
+            font-size: 0.95rem; /* Slightly smaller text */
+            color: #64748b; /* Muted grey */
+            font-weight: 500;
+            margin-top: 5px;
+        }
+
+        #eventMarkersContainer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 95%;
+            height: 6px; /* Match slider track height */
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .event-marker {
+            position: absolute;
+            width: 6px; /* Increased width for better visibility */
+            height: 100%;
+            background-color: transparent;
+            border-radius: 1px;
+            top: 0;
+        }
+
+        .event-marker.canonical-event {
+            background-color: #38b000; /* More vibrant green */
+        }
+
+        .event-marker.fork-event {
+            background-color: #d00000; /* More vibrant red */
+        }
+
+        .container.visualization-output-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0;
+            padding-bottom: 0;
+            max-width: none;
+        }
+
+        #visualization-area {
+            flex-grow: 1;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding-bottom: 15px;
+            box-sizing: border-box;
+        }
+
+        #block-svg {
+            display: block;
+            margin: 0 auto;
+            background-color: #fcfdfe; /* Even lighter background for SVG area */
+            border-radius: 8px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03); /* Very subtle inner shadow */
+            width: 100%;
+            height: 100%;
+        }
+
+        /* SVG Styles */
+        .block-rect {
+            stroke-width: 1.5; /* Thinner stroke */
+            fill: #ffffff;
+            transition: stroke 0.3s ease, fill 0.3s ease;
+            rx: 6; /* Slightly less rounded corners */
+            ry: 6;
+        }
+        .block-rect.canonical {
+            stroke: #38b000; /* Matches more vibrant green */
+            fill: #f4fff4; /* Very light green fill */
+        }
+        .block-rect.fork {
+            stroke: #d00000; /* Matches more vibrant red */
+            fill: #fff4f4; /* Very light red fill */
+        }
+
+        .block-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px; /* Slightly smaller font */
+            fill: #495057; /* Muted text color */
+            font-weight: 500;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+        .block-hash {
+            font-size: 11px; /* Slightly smaller hash font */
+            fill: #868e96; /* Lighter hash color */
+        }
+        .block-timestamp {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px; /* Matched with block-hash font-size */
+            fill: #868e96; /* Matched with block-hash fill color */
+            font-weight: 500; /* Matched with block-text font-weight, which block-hash inherits */
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+        .block-operation {
+            font-size: 16px; /* Slightly smaller emoji */
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+            /* No specific fill for emojis, they retain their default color */
+        }
+        .arrow-line {
+            stroke: #ced4da; /* Very light grey for arrows */
+            stroke-width: 1; /* Thinner arrows */
+            marker-end: url(#arrowhead);
+        }
+        #arrowhead {
+            fill: #ced4da; /* Matches arrow line */
+        }
+        .time-later-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px; /* Slightly smaller time text */
+            fill: #868e96; /* Lighter text color */
+            font-weight: 500;
+            text-anchor: start;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Block Chain Visualizer</h1>
+        
+        <div class="log-input-section" id="logInputSection">
+            <div class="log-input-header">
+                <button class="minimize-button" id="minimizeButton" onclick="toggleLogInput()">▶</button>
+                <label for="logInput" class="text-lg font-medium text-gray-700">Paste your log data here:</label>
+            </div>
+            <div class="log-input-content">
+                <textarea id="logInput" placeholder="Paste log data here..."></textarea>
+                <div class="button-group">
+                    <button onclick="visualizeLogs()">Visualize Blocks</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="timeline-control">
+            <div class="slider-and-markers-wrapper">
+                <input type="range" id="timelineSlider" value="0">
+                <div id="eventMarkersContainer"></div> <!-- Container for event markers -->
+            </div>
+            <span id="timelineTimestampDisplay" class="text-gray-600"></span>
+        </div>
+    </div>
+
+    <div class="container visualization-output-container">
+        <div id="visualization-area">
+            <svg id="block-svg"></svg>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('logInput').value = `2025-06-25 15:40:42.657 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822942 (0x9aeb…275d → 0xafa0…fe8b)
+2025-06-25 15:40:49.013 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822943 (0xafa0…fe8b → 0xe0da…e66e)
+2025-06-25 15:40:55.056 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822944 (0xe0da…e66e → 0xea62…8ebf)
+2025-06-25 15:40:55.233 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822944 (0xe0da…e66e → 0x0ae1…e36f) 
+2025-06-25 15:41:00.583 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822945 (0x0ae1…e36f → 0x8565…6852)
+2025-06-25 15:41:06.506 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822946 (0x8565…6852 → 0x9be3…d0fc)
+2025-06-25 15:41:06.558 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822946 (0x8565…6852 → 0x16a1…8196) 
+2025-06-25 15:41:12.586 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822944 (0xe0da…e66e → 0x7a75…731b) 
+2025-06-25 15:41:12.627 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822945 (0x7a75…731b → 0x3024…be59) 
+2025-06-25 15:41:18.698 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822946 (0x3024…be59 → 0x663c…1ef0) 
+2025-06-25 15:41:24.542 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822947 (0x663c…1ef0 → 0xb5f4…6aeb)
+2025-06-25 15:41:30.408 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822948 (0xb5f4…6aeb → 0x1f78…e6a8)
+2025-06-25 15:41:30.495 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822948 (0xb5f4…6aeb → 0xbcfc…7286)
+2025-06-25 15:41:36.992 INFO tokio-runtime-worker substrate: [Parachain] 🏆 Imported #9822949 (0xbcfc…7286 → 0x68fc…7941)
+2025-06-25 15:41:42.926 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822947 (0x663c…1ef0 → 0x56c4…e753) 
+2025-06-25 15:41:43.104 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822948 (0x56c4…e753 → 0xf773…a3e4) 
+2025-06-25 15:41:49.014 INFO tokio-runtime-worker substrate: [Parachain] 🆕 Imported #9822949 (0xf773…a3e4 → 0x811c…a956)`;
+
+
+        // Global variables to store all parsed blocks, their static positions,
+        // and the fixed set of canonical hashes (determined once from full data).
+        let allParsedBlocks = [];
+        let blocksByCurrentHash = new Map();
+        let staticBlockPositions = new Map(); // Stores fixed {x, y} for all blocks
+        let globalCanonicalHashes = new Set(); // Stores the hashes of blocks in the fixed canonical chain
+
+        // Global variables for SVG viewBox dimensions, calculated once.
+        let globalViewBoxX = 0;
+        let globalViewBoxY = 0;
+        let globalViewBoxWidth = 800; // Default
+        let globalViewBoxHeight = 600; // Default
+
+        // Function to parse the log data
+        function parseLog(logLine) {
+            // Regex updated to be more robust for hash extraction:
+            // It now captures any characters between ' (0x' and ' → ' for prevHash
+            // and any characters between ' → ' and ')' for currentHash.
+            const regex = /(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+INFO.*?\[Parachain\]\s+(🏆|🆕)\s+Imported\s+#(\d+)\s+\(([^ ]+)\s+→\s+([^)]+)\)\s*(.*)/;
+            const match = logLine.match(regex);
+
+            if (!match) {
+                console.warn("Could not parse log line:", logLine);
+                return null;
+            }
+
+            const timestampStr = match[1];
+            const timestamp = new Date(timestampStr.replace(' ', 'T')); // Convert to ISO format for Date object
+            const operationSymbol = match[2]; // Capture the 🏆 or 🆕 symbol
+            const blockNumber = parseInt(match[3]);
+            // Trim the captured hash parts to remove any extra spaces
+            const prevHash = match[4].trim();
+            const currentHash = match[5].trim();
+            const description = match[6].trim(); // Capture and trim any trailing description
+
+            return {
+                timestamp: timestamp,
+                timestampStr: timestampStr.split(' ')[1], // Only time part
+                operationSymbol: operationSymbol, // Store the operation symbol
+                blockNumber: blockNumber,
+                prevHash: prevHash,
+                currentHash: currentHash,
+                description: description, // Keep description for potential debugging/future use
+                x: 0,
+                y: 0
+            };
+        }
+
+        // Main visualization function (initial setup and static layout calculation)
+        function visualizeLogs() {
+            // Define constants inside the function scope to ensure they are accessible
+            const BLOCK_WIDTH = 180;
+            const BLOCK_HEIGHT = 70;
+            const HORIZONTAL_SPACING = 100;
+            const VERTICAL_SPACING = 100;
+            const BASE_Y = 50;
+            const ROW_HEIGHT = BLOCK_HEIGHT + VERTICAL_SPACING;
+            const COLUMN_WIDTH = BLOCK_WIDTH + HORIZONTAL_SPACING;
+
+
+            const logInput = document.getElementById('logInput').value;
+            const logLines = logInput.split('\n').filter(line => line.trim() !== '');
+
+            allParsedBlocks = []; // Reset global array
+            blocksByCurrentHash = new Map(); // Reset global map
+            globalCanonicalHashes = new Set(); // Reset global canonical set
+            staticBlockPositions = new Map(); // Reset static positions
+
+            // Parse all blocks and store them globally
+            for (const line of logLines) { // Corrected from logToParse to logLines
+                const block = parseLog(line);
+                if (block) {
+                    allParsedBlocks.push(block);
+                    blocksByCurrentHash.set(block.currentHash, block);
+                }
+            }
+
+            // Sort all blocks by timestamp for consistent processing and to find the "last" block
+            allParsedBlocks.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+            // --- Determine the "True Canonical" path based on the user's request ---
+            // "canonical chain is from the first block in the log lines to the last block in the log lines"
+            // This means tracing back from the currentHash of the very last block in the parsed (chronologically sorted) list.
+            let lastBlock = allParsedBlocks[allParsedBlocks.length - 1];
+
+            if (lastBlock) {
+                let traceBackHash = lastBlock.currentHash;
+                while (traceBackHash && blocksByCurrentHash.has(traceBackHash)) {
+                    globalCanonicalHashes.add(traceBackHash);
+                    const blockInChain = blocksByCurrentHash.get(traceBackHash);
+                    traceBackHash = blockInChain.prevHash;
+                }
+            }
+            // Now globalCanonicalHashes contains the hashes of blocks that are part of the 'true' canonical chain.
+
+
+            // --- Pre-calculate static positions for all blocks ---
+            const blockNumberToIndexX = new Map();
+            let uniqueBlockNumbers = [...new Set(allParsedBlocks.map(b => b.blockNumber))].sort((a, b) => a - b);
+            uniqueBlockNumbers.forEach((num, index) => {
+                blockNumberToIndexX.set(num, index);
+            });
+
+            // This map keeps track of the next available Y offset for forks in each X column.
+            const tempXColumnForkYCounters = new Map(); // xIndex -> current available yOffset for a new fork
+
+            allParsedBlocks.forEach(block => {
+                const blockXIndex = blockNumberToIndexX.get(block.blockNumber);
+                const blockX = blockXIndex * COLUMN_WIDTH + (COLUMN_WIDTH / 2); // Center block in column
+
+                let blockY = 0; // Default to main canonical lane (BASE_Y)
+
+                // If the block is part of the globally determined canonical chain, place it on the main line.
+                if (globalCanonicalHashes.has(block.currentHash)) {
+                    blockY = BASE_Y;
+                } else {
+                    // This is a fork, find the next available Y position in this column.
+                    if (!tempXColumnForkYCounters.has(blockXIndex)) {
+                        tempXColumnForkYCounters.set(blockXIndex, 0); // Start from 0, representing the row after main
+                    }
+                    const currentForkOffset = tempXColumnForkYCounters.get(blockXIndex) + 1; // +1 because 0 is main
+                    blockY = BASE_Y + currentForkOffset * ROW_HEIGHT;
+                    tempXColumnForkYCounters.set(blockXIndex, currentForkOffset);
+                }
+
+                staticBlockPositions.set(block.currentHash, {
+                    x: blockX,
+                    y: blockY,
+                    timestamp: block.timestamp,
+                    timestampStr: block.timestampStr,
+                    blockNumber: block.blockNumber,
+                    prevHash: block.prevHash,
+                    operationSymbol: block.operationSymbol // Store operation symbol for rendering
+                });
+            });
+
+            // --- Calculate global viewBox dimensions based on all static positions ---
+            let minX = Infinity, minY = Infinity;
+            let maxX = -Infinity, maxY = -Infinity;
+
+            if (allParsedBlocks.length > 0) {
+                staticBlockPositions.forEach(pos => {
+                    minX = Math.min(minX, pos.x - BLOCK_WIDTH / 2);
+                    minY = Math.min(minY, pos.y - BLOCK_HEIGHT / 2);
+                    maxX = Math.max(maxX, pos.x + BLOCK_WIDTH / 2);
+                    maxY = Math.max(maxY, pos.y + BLOCK_HEIGHT / 2);
+                });
+
+                // Add some padding to ensure everything fits, including text annotations
+                const padding = 70; // Increased padding to accommodate timestamp and time-later text
+                globalViewBoxX = minX - padding;
+                globalViewBoxY = minY - padding;
+                globalViewBoxWidth = (maxX - minX) + 2 * padding;
+                globalViewBoxHeight = (maxY - minY) + 2 * padding;
+            } else {
+                globalViewBoxX = 0;
+                globalViewBoxY = 0;
+                globalViewBoxWidth = 800;
+                globalViewBoxHeight = 600;
+            }
+
+
+            // --- Initialize Slider ---
+            const timelineSlider = document.getElementById('timelineSlider');
+            const timelineTimestampDisplay = document.getElementById('timelineTimestampDisplay');
+            const eventMarkersContainer = document.getElementById('eventMarkersContainer');
+
+            // Clear existing markers
+            eventMarkersContainer.innerHTML = '';
+
+            if (allParsedBlocks.length > 0) {
+                const minTimestampMs = allParsedBlocks[0].timestamp.getTime();
+                // Add 10 seconds (10 * 1000 milliseconds) to the max timestamp
+                const maxTimestampMs = allParsedBlocks[allParsedBlocks.length - 1].timestamp.getTime() + (10 * 1000); 
+
+                timelineSlider.min = minTimestampMs;
+                timelineSlider.max = maxTimestampMs;
+                timelineSlider.value = minTimestampMs; // Start at the beginning
+                timelineSlider.step = 1000; // Step by 1 second (1000 ms)
+
+                // Add event markers
+                allParsedBlocks.forEach(block => {
+                    const marker = document.createElement('div');
+                    marker.classList.add('event-marker');
+                    // Determine if it's a canonical or fork block
+                    const isCanonical = globalCanonicalHashes.has(block.currentHash);
+                    marker.classList.add(isCanonical ? 'canonical-event' : 'fork-event');
+
+                    // Calculate position based on timestamp
+                    const percentage = (block.timestamp.getTime() - minTimestampMs) / (maxTimestampMs - minTimestampMs);
+                    marker.style.left = `${percentage * 100}%`;
+                    eventMarkersContainer.appendChild(marker);
+                });
+
+
+                // Initial visualization at the minimum timestamp
+                updateVisualizationForTime(minTimestampMs);
+
+                // Add event listener for slider
+                timelineSlider.oninput = (event) => {
+                    updateVisualizationForTime(parseInt(event.target.value));
+                };
+            } else {
+                // Clear SVG if no blocks
+                renderSVG([], new Map(), []);
+                timelineTimestampDisplay.textContent = 'No data';
+                timelineSlider.min = 0;
+                timelineSlider.max = 0;
+                timelineSlider.value = 0;
+            }
+        }
+
+        // Function to update visualization based on slider's current time
+        function updateVisualizationForTime(currentTimeMs) {
+            const timelineTimestampDisplay = document.getElementById('timelineTimestampDisplay');
+            timelineTimestampDisplay.textContent = new Date(currentTimeMs).toLocaleString();
+
+            // 1. Filter blocks that are visible at the current timestamp
+            // These blocks will inherit their pre-calculated static positions and colors.
+            const blocksToRender = [];
+            allParsedBlocks.forEach(block => {
+                if (block.timestamp.getTime() <= currentTimeMs) {
+                    const pos = staticBlockPositions.get(block.currentHash);
+                    // Assign calculatedType based on the globally determined canonical path
+                    blocksToRender.push({
+                        ...block,
+                        x: pos.x,
+                        y: pos.y,
+                        calculatedType: globalCanonicalHashes.has(block.currentHash) ? 'canonical' : 'fork'
+                    });
+                }
+            });
+
+            // Sort blocks by X position, then Y position for stable drawing order
+            blocksToRender.sort((a, b) => {
+                if (a.x !== b.x) return a.x - b.x;
+                return a.y - b.y;
+            });
+
+            // 4. Calculate time annotations for the currently visible canonical chain
+            const timeAnnotations = [];
+            let lastTimestampOnMainLine = null;
+            let lastXOnMainLine = null;
+            let lastYOnMainLine = null;
+
+            // Only consider blocks that are part of the global canonical path AND are currently visible
+            const currentMainLineBlocks = blocksToRender
+                .filter(block => globalCanonicalHashes.has(block.currentHash))
+                .sort((a, b) => a.x - b.x); // Sort by X to ensure correct order along the chain
+
+            for (let i = 0; i < currentMainLineBlocks.length; i++) {
+                const currentBlock = currentMainLineBlocks[i];
+                // Find the direct predecessor in the GLOBAL canonical chain
+                const prevBlockInGlobalCanonicalChain = allParsedBlocks.find(b => b.currentHash === currentBlock.prevHash && globalCanonicalHashes.has(b.currentHash));
+                
+                // Only add annotation if the previous block in the canonical chain is also visible
+                // and it's a direct predecessor in the canonical path.
+                if (lastTimestampOnMainLine && prevBlockInGlobalCanonicalChain && currentMainLineBlocks[i-1]?.currentHash === prevBlockInGlobalCanonicalChain.currentHash) {
+                    const timeDiffMs = currentBlock.timestamp.getTime() - lastTimestampOnMainLine.getTime();
+                    const secondsDiff = Math.round(timeDiffMs / 1000);
+                    if (secondsDiff > 0) {
+                        const midX = (lastXOnMainLine + currentBlock.x) / 2;
+                        const midY = lastYOnMainLine - 20; // Above the main line
+                        timeAnnotations.push({ x: midX, y: midY, text: `${secondsDiff} seconds later` });
+                    }
+                }
+                lastTimestampOnMainLine = currentBlock.timestamp;
+                lastXOnMainLine = currentBlock.x;
+                lastYOnMainLine = currentBlock.y;
+            }
+
+            // 5. Render the SVG with the filtered and colored blocks
+            renderSVG(blocksToRender, staticBlockPositions, timeAnnotations);
+        }
+
+
+        // Render the SVG
+        function renderSVG(blocksToRender, blockPositionsMap, timeAnnotations) {
+            // Define constants inside the function scope to ensure they are accessible
+            const BLOCK_WIDTH = 180;
+            const BLOCK_HEIGHT = 70;
+            const HORIZONTAL_SPACING = 100;
+            const VERTICAL_SPACING = 100;
+            /* Removed BASE_Y, ROW_HEIGHT, COLUMN_WIDTH as they are not used in rendering */
+
+
+            const svg = document.getElementById('block-svg');
+            // Clear previous content
+            svg.innerHTML = '';
+
+            // Add SVG definition for arrowhead
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '7');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '3.5');
+            marker.setAttribute('orient', 'auto');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 0 0 L 10 3.5 L 0 7 z');
+            marker.appendChild(path);
+            defs.appendChild(marker);
+            svg.appendChild(defs);
+
+            // Use global viewBox dimensions
+            svg.setAttribute('viewBox', `${globalViewBoxX} ${globalViewBoxY} ${globalViewBoxWidth} ${globalViewBoxHeight}`);
+            // Set width and height to 100% to fill the container and let viewBox handle scaling
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+
+
+            // Draw connections (arrows) first so blocks are on top
+            blocksToRender.forEach(toBlock => {
+                const fromBlock = blocksByCurrentHash.get(toBlock.prevHash); // Get the full block object for the source
+                if (!fromBlock) return; // If source block is not in our parsed data, skip
+
+                // Check if the source block is also visible
+                const isFromBlockVisible = blocksToRender.some(b => b.currentHash === fromBlock.currentHash);
+
+                if (isFromBlockVisible) {
+                    const fromPos = blockPositionsMap.get(fromBlock.currentHash);
+                    const toPos = blockPositionsMap.get(toBlock.currentHash);
+
+                    if (fromPos && toPos) {
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('class', 'arrow-line');
+
+                        let x1 = fromPos.x;
+                        let y1 = fromPos.y;
+                        let x2 = toPos.x;
+                        let y2 = toPos.y;
+
+                        // Adjust for block edges to connect to the center of the side
+                        if (x1 === x2) { // Vertical connection
+                            if (y1 < y2) { // Downwards
+                                y1 += BLOCK_HEIGHT / 2;
+                                y2 -= BLOCK_HEIGHT / 2;
+                            } else { // Upwards
+                                y1 -= BLOCK_HEIGHT / 2;
+                                y2 += BLOCK_HEIGHT / 2;
+                            }
+                        } else if (y1 === y2) { // Horizontal connection
+                            if (x1 < x2) { // Rightwards
+                                x1 += BLOCK_WIDTH / 2;
+                                x2 -= BLOCK_WIDTH / 2;
+                            } else { // Leftwards
+                                x1 -= BLOCK_WIDTH / 2;
+                                x2 += BLOCK_WIDTH / 2;
+                            }
+                        } else { // Diagonal connection (simple intersection point for clarity)
+                            // Find direction vector
+                            const dx = x2 - x1;
+                            const dy = y2 - y1;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+
+                            // Normalize direction
+                            const nx = dx / dist;
+                            const ny = dy / dist;
+
+                            // Move start/end points to boundary of blocks
+                            x1 += nx * (BLOCK_WIDTH / 2);
+                            y1 += ny * (BLOCK_HEIGHT / 2); // Approximate for rectangular block
+                            x2 -= nx * (BLOCK_WIDTH / 2);
+                            y2 -= ny * (BLOCK_HEIGHT / 2);
+                        }
+
+                        line.setAttribute('x1', x1);
+                        line.setAttribute('y1', y1);
+                        line.setAttribute('x2', x2);
+                        line.setAttribute('y2', y2);
+                        svg.appendChild(line);
+                    }
+                }
+            });
+
+
+            // Draw blocks
+            blocksToRender.forEach(block => {
+                const x = block.x - BLOCK_WIDTH / 2;
+                const y = block.y - BLOCK_HEIGHT / 2;
+
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', x);
+                rect.setAttribute('y', y);
+                rect.setAttribute('width', BLOCK_WIDTH);
+                rect.setAttribute('height', BLOCK_HEIGHT);
+                rect.setAttribute('class', `block-rect ${block.calculatedType}`);
+                svg.appendChild(rect);
+
+                // Timestamp text
+                const timestampText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                timestampText.setAttribute('x', block.x);
+                timestampText.setAttribute('y', block.y - 20); // Position above block number
+                timestampText.setAttribute('class', 'block-timestamp');
+                timestampText.textContent = block.timestampStr;
+                svg.appendChild(timestampText);
+
+                // Operation Symbol (🏆 or 🆕)
+                const operationSymbolText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                operationSymbolText.setAttribute('x', block.x - (BLOCK_WIDTH / 2) + 15); // Left-aligned inside block
+                operationSymbolText.setAttribute('y', block.y); // Centered vertically
+                operationSymbolText.setAttribute('class', 'block-operation');
+                operationSymbolText.textContent = block.operationSymbol;
+                svg.appendChild(operationSymbolText);
+
+
+                const blockNumText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                blockNumText.setAttribute('x', block.x);
+                blockNumText.setAttribute('y', block.y); // Centered vertically in the block
+                blockNumText.setAttribute('class', 'block-text');
+                blockNumText.textContent = `#${block.blockNumber}`;
+                svg.appendChild(blockNumText);
+
+                const blockHashText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                blockHashText.setAttribute('x', block.x);
+                blockHashText.setAttribute('y', block.y + 20); // Shifted down for hash
+                blockHashText.setAttribute('class', 'block-text block-hash');
+                blockHashText.textContent = block.currentHash;
+                svg.appendChild(blockHashText);
+            });
+
+            // Draw time annotations
+            timeAnnotations.forEach(annotation => {
+                const textElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                textElement.setAttribute('x', annotation.x);
+                textElement.setAttribute('y', annotation.y);
+                textElement.setAttribute('class', 'time-later-text');
+                textElement.textContent = annotation.text;
+                svg.appendChild(textElement);
+            });
+        }
+
+        // Function to toggle the visibility of the log input area
+        function toggleLogInput() {
+            const logInputSection = document.getElementById('logInputSection');
+            const minimizeButton = document.getElementById('minimizeButton');
+
+            if (logInputSection.classList.contains('minimized')) {
+                logInputSection.classList.remove('minimized');
+                minimizeButton.textContent = '▶'; // Right arrow when expanded
+                minimizeButton.setAttribute('aria-expanded', 'true');
+            } else {
+                logInputSection.classList.add('minimized');
+                minimizeButton.textContent = '▼'; // Down arrow when minimized
+                minimizeButton.setAttribute('aria-expanded', 'false');
+            }
+        }
+
+        // Run visualization on page load
+        window.onload = visualizeLogs;
+    </script>
+</body>
+</html>
+
