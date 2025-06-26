@@ -242,7 +242,7 @@
             flex-grow: 1;
             width: 100%;
             height: 100%;
-            overflow: auto;
+            overflow: hidden; /* Changed to hidden to prevent scrollbars when zooming/panning */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -258,6 +258,10 @@
             box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.03); /* Very subtle inner shadow */
             width: 100%;
             height: 100%;
+            cursor: grab; /* Cursor for panning */
+        }
+        #block-svg.panning {
+            cursor: grabbing;
         }
 
         /* SVG Styles */
@@ -336,6 +340,7 @@
                 <textarea id="logInput" placeholder="Paste log data here..."></textarea>
                 <div class="button-group">
                     <button onclick="visualizeLogs()">Visualize Blocks</button>
+                    <button onclick="resetZoomAndPan()">Reset View</button> <!-- New button added here -->
                 </div>
             </div>
         </div>
@@ -386,11 +391,20 @@
         let staticBlockPositions = new Map(); // Stores fixed {x, y} for all blocks
         let globalCanonicalHashes = new Set(); // Stores the hashes of blocks in the fixed canonical chain
 
-        // Global variables for SVG viewBox dimensions, calculated once.
+        // Global variables for SVG viewBox dimensions, calculated once on initial load.
         let globalViewBoxX = 0;
         let globalViewBoxY = 0;
         let globalViewBoxWidth = 800; // Default
         let globalViewBoxHeight = 600; // Default
+
+        // Zoom and Pan state variables
+        let currentScale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isPanning = false;
+        let startPanX = 0;
+        let startPanY = 0;
+
 
         // Function to parse the log data
         function parseLog(logLine) {
@@ -540,6 +554,10 @@
                 globalViewBoxHeight = 600;
             }
 
+            // Reset zoom and pan for new visualization
+            currentScale = 1;
+            panX = 0;
+            panY = 0;
 
             // --- Initialize Slider ---
             const timelineSlider = document.getElementById('timelineSlider');
@@ -583,7 +601,7 @@
                 };
             } else {
                 // Clear SVG if no blocks
-                renderSVG([], new Map(), []);
+                renderSVG([]); // Pass empty array as blocksToRender
                 timelineTimestampDisplay.textContent = 'No data';
                 timelineSlider.min = 0;
                 timelineSlider.max = 0;
@@ -654,18 +672,45 @@
             renderSVG(blocksToRender, staticBlockPositions, timeAnnotations);
         }
 
+        /**
+         * Updates the SVG viewBox based on global dimensions, current zoom, and pan.
+         */
+        function updateViewBox() {
+            const svg = document.getElementById('block-svg');
+            if (!svg) return;
+
+            // Calculate the effective width and height after applying zoom
+            const effectiveWidth = globalViewBoxWidth / currentScale;
+            const effectiveHeight = globalViewBoxHeight / currentScale;
+
+            // Calculate the top-left corner of the effective viewport, adjusted by pan
+            const viewBoxCurrentX = globalViewBoxX + panX;
+            const viewBoxCurrentY = globalViewBoxY + panY;
+
+            svg.setAttribute('viewBox', `${viewBoxCurrentX} ${viewBoxCurrentY} ${effectiveWidth} ${effectiveHeight}`);
+        }
+
+        /**
+         * Resets the zoom and pan to their initial values.
+         */
+        function resetZoomAndPan() {
+            currentScale = 1;
+            panX = 0;
+            panY = 0;
+            updateViewBox();
+        }
 
         // Render the SVG
         function renderSVG(blocksToRender, blockPositionsMap, timeAnnotations) {
             // Define constants inside the function scope to ensure they are accessible
             const BLOCK_WIDTH = 180;
             const BLOCK_HEIGHT = 70;
-            const HORIZONTAL_SPACING = 100;
-            const VERTICAL_SPACING = 100;
-            /* Removed BASE_Y, ROW_HEIGHT, COLUMN_WIDTH as they are not used in rendering */
+            /* Removed HORIZONTAL_SPACING, VERTICAL_SPACING etc. as they are used for calculating static positions only */
 
 
             const svg = document.getElementById('block-svg');
+            if (!svg) return; // Exit if SVG element is not found
+
             // Clear previous content
             svg.innerHTML = '';
 
@@ -684,8 +729,9 @@
             defs.appendChild(marker);
             svg.appendChild(defs);
 
-            // Use global viewBox dimensions
-            svg.setAttribute('viewBox', `${globalViewBoxX} ${globalViewBoxY} ${globalViewBoxWidth} ${globalViewBoxHeight}`);
+            // Update viewBox with current zoom and pan settings
+            updateViewBox();
+
             // Set width and height to 100% to fill the container and let viewBox handle scaling
             svg.setAttribute('width', '100%');
             svg.setAttribute('height', '100%');
@@ -828,8 +874,85 @@
             }
         }
 
-        // Run visualization on page load
-        window.onload = visualizeLogs;
+        // Event Listeners for Zoom and Pan
+        window.onload = function () {
+            visualizeLogs(); // Run initial visualization
+
+            const svg = document.getElementById('block-svg');
+            if (svg) {
+                // Zoom functionality (mouse wheel)
+                svg.addEventListener('wheel', (event) => {
+                    event.preventDefault(); // Prevent page scrolling
+
+                    const zoomIntensity = 0.1;
+                    const oldScale = currentScale;
+
+                    // Determine new scale
+                    if (event.deltaY < 0) { // Zoom in
+                        currentScale *= (1 + zoomIntensity);
+                    } else { // Zoom out
+                        currentScale /= (1 + zoomIntensity);
+                    }
+
+                    // Clamp scale to reasonable limits
+                    currentScale = Math.max(0.1, Math.min(currentScale, 5)); // Min 0.1, Max 5x zoom
+
+                    // Get mouse position relative to SVG
+                    const svgRect = svg.getBoundingClientRect();
+                    const mouseX = event.clientX - svgRect.left;
+                    const mouseY = event.clientY - svgRect.top;
+
+                    // Calculate the point in SVG coordinates before zoom
+                    // This is the point we want to keep stationary during zoom
+                    const svgPointX = globalViewBoxX + panX + (mouseX / svgRect.width) * (globalViewBoxWidth / oldScale);
+                    const svgPointY = globalViewBoxY + panY + (mouseY / svgRect.height) * (globalViewBoxHeight / oldScale);
+
+                    // Adjust pan to keep svgPoint stationary after new zoom
+                    panX = svgPointX - (mouseX / svgRect.width) * (globalViewBoxWidth / currentScale) - globalViewBoxX;
+                    panY = svgPointY - (mouseY / svgRect.height) * (globalViewBoxHeight / currentScale) - globalViewBoxY;
+
+                    updateViewBox();
+                });
+
+                // Pan functionality (mouse drag)
+                svg.addEventListener('mousedown', (event) => {
+                    isPanning = true;
+                    svg.classList.add('panning');
+                    startPanX = event.clientX;
+                    startPanY = event.clientY;
+                });
+
+                svg.addEventListener('mousemove', (event) => {
+                    if (!isPanning) return;
+
+                    // Calculate how much the mouse has moved
+                    const dx = event.clientX - startPanX;
+                    const dy = event.clientY - startPanY;
+
+                    // Adjust pan amounts based on current scale to move the viewBox appropriately
+                    // The 'currentScale' is crucial here because moving the mouse 1px on screen
+                    // corresponds to a different number of SVG units depending on the zoom level.
+                    panX -= dx / currentScale;
+                    panY -= dy / currentScale;
+
+                    // Update start positions for the next move event
+                    startPanX = event.clientX;
+                    startPanY = event.clientY;
+
+                    updateViewBox();
+                });
+
+                svg.addEventListener('mouseup', () => {
+                    isPanning = false;
+                    svg.classList.remove('panning');
+                });
+
+                svg.addEventListener('mouseleave', () => {
+                    isPanning = false;
+                    svg.classList.remove('panning');
+                });
+            }
+        };
     </script>
 </body>
 </html>
